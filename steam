@@ -1,0 +1,98 @@
+#!/bin/bash
+
+PATH=/usr/sbin:/usr/bin:/sbin:/bin
+
+USER_UID=$(id -u)
+USER_GID=$(id -g)
+
+XSOCK=/tmp/.X11-unix
+XAUTH=/tmp/.docker.xauth
+STEAM_DIR=$(readlink -f $HOME/.local/share/Steam)
+
+cleanup_stopped_steam_instances(){
+  echo "Cleaning up stopped steam instances..."
+  for c in $(${SUDO} docker ps -a -q)
+  do
+    image="$(${SUDO} docker inspect -f {{.Config.Image}} ${c})"
+    if [ "${image}" == "steawm:latest" ]; then
+      running=$(${SUDO} docker inspect -f {{.State.Running}} ${c})
+      if [ "${running}" != "true" ]; then
+        ${SUDO} docker rm "${c}" >/dev/null
+      fi
+    fi
+  done
+}
+
+prepare_docker_env_parameters() {
+  ENV_VARS+=" --env=USER_UID=${USER_UID}"
+  ENV_VARS+=" --env=USER_GID=${USER_GID}"
+  ENV_VARS+=" --env=DISPLAY"
+  ENV_VARS+=" --env=XAUTHORITY=${XAUTH}"
+  ENV_VARS+=" --env=TZ=$(date +%Z)"
+}
+
+prepare_docker_volume_parameters() {
+  touch ${XAUTH}
+  xauth nlist | sed -e 's/^..../ffff/' | xauth -f ${XAUTH} nmerge -
+
+  if [ ! -d ${STEAM_DIR} ] ; then
+      echo "No steam directory found under ~/.local/share. Creating one..."
+      mkdir -p $STEAM_DIR
+  fi
+  VOLUMES+=" --volume=${STEAM_DIR}:/mnt/Steam"
+
+  VOLUMES+=" --volume=${XSOCK}:${XSOCK}"
+  VOLUMES+=" --volume=${XAUTH}:${XAUTH}"
+}
+
+prepare_docker_device_parameters() {
+  # enumerate video devices for webcam support
+  VIDEO_DEVICES=
+  for device in /dev/video*
+  do
+    if [ -c $device ]; then
+      VIDEO_DEVICES="${VIDEO_DEVICES} --device $device:$device"
+    fi
+  done
+  for device in /dev/snd/*
+  do
+    if [ -c $device ]; then
+      VIDEO_DEVICES="${VIDEO_DEVICES} --device $device:$device"
+    fi
+  done
+}
+
+prog=$(basename $0)
+exec=$(which $prog)
+
+if [[ ${prog} == "steam-wrapper" ]]; then
+  case ${1} in
+    steam)
+      prog=${1}
+      shift
+      ;;
+    *|help)
+      list_commands
+      exit 1
+      ;;
+  esac
+elif [[ -n ${exec} ]]; then
+  # launch host binary if it exists
+  exec ${exec} $@
+fi
+
+[ ! -d ${AGILEBITS_LICENSE} ] && mkdir ${AGILEBITS_LICENSE}
+
+
+cleanup_stopped_steam_instances
+prepare_docker_env_parameters
+prepare_docker_volume_parameters
+prepare_docker_device_parameters
+
+echo "Starting ${prog}..."
+${SUDO} docker run -d \
+  ${ENV_VARS} \
+  ${VIDEO_DEVICES} \
+  ${VOLUMES} \
+  --net="host" \
+  eyehatefim/steam:latest >/dev/null

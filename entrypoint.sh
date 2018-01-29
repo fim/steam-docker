@@ -11,4 +11,4 @@ mkdir -p /home/$USER/.local/share && chown $USER /home/$USER/.local/share
 ln -snf /mnt/Steam /home/$USER/.local/share/Steam
 
 # Run steam as USER
-su - $USER -c "steam"
+su - $USER -c "dbus-run-session steam"

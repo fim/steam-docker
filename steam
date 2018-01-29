@@ -40,7 +40,7 @@ prepare_docker_volume_parameters() {
       mkdir -p $STEAM_DIR
   fi
   VOLUMES+=" --volume=${STEAM_DIR}:/mnt/Steam"
-
+  VOLUMES+=" --volume /dev/shm:/dev/shm"
   VOLUMES+=" --volume=${XSOCK}:${XSOCK}"
   VOLUMES+=" --volume=${XAUTH}:${XAUTH}"
 }
